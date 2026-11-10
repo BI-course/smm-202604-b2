@@ -1,101 +1,140 @@
 """
 api.py
 
-A RESTish API, built with Flask, that serves FOUR machine learning artifacts
-produced in earlier labs:
+Our group's Flask API. It serves FOUR machine learning artifacts that were
+trained and saved in earlier labs. They are loaded from the model/ folder
+once, at startup. NOTHING is ever trained in this file.
 
-    1. Regression       -- SME monthly revenue prediction
-    2. Classification   -- SME credit risk category
-    3. Clustering       -- Mall customer segment assignment
-    4. Association Rule -- Product recommendation from a cart
+    1. Regression       -- MEMBER 1 (Lisa)
+    2. Classification   -- MEMBER 2 (Stephanie)
+    3. Clustering       -- MEMBER 3 (Amiir)
+    4. Association Rule -- MEMBER 4 (Felista)
        Mining (ARM)
 
-The point of this file is to show you that a fitted scikit-learn /
-imbalanced-learn Pipeline is a SINGLE object that already knows how to impute
-missing values, encode categorical columns, scale numeric columns, and (for
-the classifier) apply SMOTE only during training -- never during inference.
-Because all of that preprocessing lives inside the Pipeline itself, this file
-never manually label-encodes anything, never manually engineers date features,
-and never manually reorders columns before calling .predict(). It builds a
-DataFrame straight from the incoming JSON and hands it to the pipeline as-is.
-This is the main lesson of the lab: "the pipeline IS the deployment artifact."
+STATUS: the four MEMBER blocks below still serve the lecturer's in-class
+models, so the API keeps working while we swap them out. Each member replaces
+ONLY their own block with our group's model. The SHARED sections (CORS,
+helpers, health check, error handling) belong to Mariam: tell her before
+changing them.
 
-Run this file directly to start a local development server:
+Run a local development server:
 
-    python api.py
+    python api.py        ->  http://127.0.0.1:5000/api/v1/health
 """
 
 import os
 
 import joblib
+import numpy as np
 import pandas as pd
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 
 app = Flask(__name__)
 
-# -----------------------------------------------------------------------
-# CORS (Cross-Origin Resource Sharing)
-# -----------------------------------------------------------------------
-# By default, a browser blocks JavaScript on one origin (e.g., a page served
-# from http://127.0.0.1:5500) from calling an API on a different origin
-# (e.g., http://127.0.0.1:5000). `flask_cors` relaxes that restriction for the
-# specific origins we trust during local development.
-#
-# A few alternative configurations are shown below (commented out) so you can
-# see how the restriction can be loosened or tightened depending on your
-# deployment target. Only ONE of these should be active at a time.
 
-# Option A (the most permissive. This is fine for a quick classroom demo or
-# local development, *NEVER* for production):
-# CORS(app)
-
-# Option B (allow only a specific frontend origin):
-# CORS(app, resources={r"/api/*": {"origins": "http://127.0.0.1:5500"}})
-
-# Option C (the one actually in use here -- allow localhost/127.0.0.1 on the
-# ports our lab's frontend files are typically served from):
+# =======================================================================
+# SHARED (Member 6- Mariam): CORS (Cross-Origin Resource Sharing)
+# =======================================================================
+# A browser blocks JavaScript on one origin (e.g., a page served from
+# http://127.0.0.1:5500) from calling an API on a different origin
+# (e.g., http://127.0.0.1:5000) unless the API allows it. These are the
+# origins our frontend pages are served from during development.
 CORS(app, resources={r"/api/*": {"origins": [
     "http://localhost:5000", "http://127.0.0.1:5000",
     "http://localhost:5500", "http://127.0.0.1:5500",
+    "https://localhost", "https://127.0.0.1",
     "https://localhost:443", "https://127.0.0.1:443",
-    "http://localhost:63342",  # VS Code Live Server extension
-    "null",  # allows opening a frontend .html file directly (file://) with no web server
+    "http://localhost:63342",  # PyCharm's built-in web server
+    "null",  # a frontend .html file opened directly (file://)
 ]}})
 
+
+# =======================================================================
+# SHARED (Mariam): model folder and input helpers
+# =======================================================================
+# An absolute path, so model/ is found no matter which folder the API is
+# started from (PyCharm, a terminal, Docker or Render).
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR = os.path.join(BASE_DIR, "model")
+
+
+def load_artifact(filename):
+    """Load one saved artifact from model/. Training never happens here."""
+    return joblib.load(os.path.join(MODEL_DIR, filename))
+
+
+def expected_fields(fitted_object):
+    """The column names an artifact was fitted on, read from the artifact
+    itself (scikit-learn stores them when it is fitted on a DataFrame).
+    Returns [] if the artifact does not record them."""
+    return [str(name) for name in getattr(fitted_object, "feature_names_in_", [])]
+
+
+class InputError(Exception):
+    """Bad or missing input from the client. Always returned as HTTP 400."""
+
+
+def get_payload(required_fields=()):
+    """Return the JSON body as a dict, or raise InputError if the body is
+    missing or empty, or if any required field is absent.
+
+    A field that is PRESENT but null is allowed on purpose: our pipelines'
+    imputers handle structural missingness (see the lecturer's notes on
+    avg_daily_foot_traffic and collateral_value_kes)."""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or not payload:
+        raise InputError(
+            "Send a non-empty JSON object with the header "
+            "'Content-Type: application/json'."
+        )
+    missing = [field for field in required_fields if field not in payload]
+    if missing:
+        raise InputError("Missing input field(s): " + ", ".join(missing))
+    return payload
+
+
+def to_input_row(payload, fields):
+    """One-row DataFrame holding the fields the model expects, in the
+    order it was trained on. Any extra keys in the request are ignored."""
+    row = pd.DataFrame([payload])
+    return row[fields] if fields else row
+
+
+# =======================================================================
+# SHARED (Member 6 - Mariam): health check
+# =======================================================================
+# Lists every prediction endpoint automatically, so it stays correct as
+# members rename their routes. Render and Docker can also use it to check
+# that the API is up.
+@app.route("/", methods=["GET"])
+@app.route("/api/v1/health", methods=["GET"])
+def health():
+    endpoints = sorted(
+        rule.rule for rule in app.url_map.iter_rules() if "POST" in rule.methods
+    )
+    return jsonify({
+        "status": "ok",
+        "message": "All four artifacts are loaded. Send a POST request to an endpoint below.",
+        "prediction_endpoints": endpoints,
+    })
+
+
+# =======================================================================
+# MEMBER 1 (Lisa): REGRESSION
 # -----------------------------------------------------------------------
-# The best practice is to load the four persisted artifacts ONCE, at startup,
-# not per-request.
-# Loading inside a route function would re-read the file from disk on every
-# single API call, which is slow and pointless -- the fitted model never
-# changes while the server is running.
-# -----------------------------------------------------------------------
-MODEL_DIR = "./model"
-
-regression_pipeline = joblib.load(
-    os.path.join(MODEL_DIR, "lasso_regressor_for_sme_revenue.joblib")
-)
-
-classification_pipeline = joblib.load(
-    os.path.join(MODEL_DIR, "svc_classifier_for_sme_credit_risk.joblib")
-)
-
-clustering_artifact = joblib.load(
-    os.path.join(MODEL_DIR, "kmeans_mall_customer_segmentation.joblib")
-)
-clustering_scaler = clustering_artifact["scaler"]
-clustering_kmeans = clustering_artifact["kmeans"]
-
-arm_artifact = joblib.load(
-    os.path.join(MODEL_DIR, "apriori_recommendation_rules.joblib")
-)
-recommendation_lookup = arm_artifact["recommendation_lookup"]
-sku_lookup = arm_artifact["sku_lookup"]
-
-print("All the four artifacts have been loaded. The API is ready.")
-
-
-# 1. REGRESSION -- predict monthly revenue (KES) for an SME
+# TODO (Lisa): replace the lecturer's SME revenue model with OUR regressor.
+#   1. Copy our saved file into model/ and change the filename below.
+#   2. Rename the URL to describe our model:
+#      /api/v1/models/<our-model-name>/predictions
+#   3. Update the sample request, the response keys and the "model" text.
+#   4. Remove the np.expm1(...) step unless our model was ALSO trained on
+#      log1p(target).
+#   5. Keep get_payload(...) and to_input_row(...) as they are.
+# =======================================================================
+regression_pipeline = load_artifact("lasso_regressor_for_sme_revenue.joblib")
+REGRESSION_FIELDS = expected_fields(regression_pipeline)
 
 # Sample request (cURL):
 #   curl -X POST http://127.0.0.1:5000/api/v1/models/sme-revenue-regressor/predictions \
@@ -108,38 +147,13 @@ print("All the four artifacts have been loaded. The API is ready.")
 #             "online_presence_score": 78.0, "loan_amount_kes": 250000,
 #             "interest_rate_pct": 14.5, "inflation_rate_pct": 6.5,
 #             "competitor_density": 5, "customer_satisfaction_score": 4.2}'
-#
-# Sample request (PowerShell):
-#   Invoke-RestMethod -Method Post `
-#     -Uri "http://127.0.0.1:5000/api/v1/models/sme-revenue-regressor/predictions" `
-#     -ContentType "application/json" `
-#     -Body (@{sector="Technology"; county="Nairobi"; quarter="Q3";
-#              business_age_years=4.5; num_employees=12;
-#              owner_education_level="Secondary";
-#              monthly_marketing_spend_kes=45000; avg_daily_foot_traffic=$null;
-#              online_presence_score=78.0; loan_amount_kes=250000;
-#              interest_rate_pct=14.5; inflation_rate_pct=6.5;
-#              competitor_density=5; customer_satisfaction_score=4.2} | ConvertTo-Json)
-#
-# Note: avg_daily_foot_traffic is deliberately null for a Technology-sector
-# business (fully online -- foot traffic is structurally not applicable, not
-# missing at random). The pipeline's own imputer handles the null value; nothing
-# in this file needs to know that rule.
 @app.route("/api/v1/models/sme-revenue-regressor/predictions", methods=["POST"])
 def predict_revenue():
-    payload = request.get_json()
-
-    # Build a one-row DataFrame straight from the JSON body. No manual
-    # label-encoding, no manual date parsing, no manual column reordering, etc. --
-    # the pipeline's ColumnTransformer already knows which columns it expects
-    # and how to preprocess each one.
-    input_row = pd.DataFrame([payload])
+    payload = get_payload(REGRESSION_FIELDS)
+    input_row = to_input_row(payload, REGRESSION_FIELDS)
 
     predicted_log_revenue = regression_pipeline.predict(input_row)[0]
-    # The pipeline was trained on log1p(revenue) because revenue was
-    # right-skewed; we invert that single transformation here to report the
-    # predictions in KES.
-    import numpy as np
+    # Trained on log1p(revenue), so invert that to report KES.
     predicted_revenue_kes = float(np.expm1(predicted_log_revenue))
 
     return jsonify({
@@ -148,7 +162,21 @@ def predict_revenue():
     })
 
 
-# 2. CLASSIFICATION -- predict SME credit risk category (Low/Medium/High)
+# =======================================================================
+# MEMBER 2 (Stephanie): CLASSIFICATION
+# -----------------------------------------------------------------------
+# TODO (Stephanie): replace the lecturer's SME credit risk model with OUR
+# classifier.
+#   1. Copy our saved file into model/ and change the filename below.
+#   2. Rename the URL: /api/v1/models/<our-model-name>/predictions
+#   3. Update the sample request, the response keys and the "model" text.
+#   4. "model" in named_steps["model"] must match the step name used in
+#      our Pipeline. If our model has no predict_proba, drop the
+#      probabilities.
+#   5. Keep get_payload(...) and to_input_row(...) as they are.
+# =======================================================================
+classification_pipeline = load_artifact("svc_classifier_for_sme_credit_risk.joblib")
+CLASSIFICATION_FIELDS = expected_fields(classification_pipeline)
 
 # Sample request (cURL):
 #   curl -X POST http://127.0.0.1:5000/api/v1/models/sme-credit-risk-classifier/predictions \
@@ -162,16 +190,10 @@ def predict_revenue():
 #             "credit_score": 590, "num_previous_loans": 1,
 #             "missed_payments_count": 3, "online_presence_score": 40.0,
 #             "customer_satisfaction_score": 3.4, "competitor_density": 6}'
-#
-#
-# Note: collateral_value_kes is null here because "Working Capital" loans are
-# more often unsecured (structural missingness, not missing at random) --
-# again, the pipeline's imputer + missingness indicator already handles this
-# internally; this route does not need special code for it.
 @app.route("/api/v1/models/sme-credit-risk-classifier/predictions", methods=["POST"])
 def predict_credit_risk():
-    payload = request.get_json()
-    input_row = pd.DataFrame([payload])
+    payload = get_payload(CLASSIFICATION_FIELDS)
+    input_row = to_input_row(payload, CLASSIFICATION_FIELDS)
 
     predicted_class = classification_pipeline.predict(input_row)[0]
     predicted_probabilities = classification_pipeline.predict_proba(input_row)[0]
@@ -187,23 +209,32 @@ def predict_credit_risk():
     })
 
 
-# 3. CLUSTERING -- assign a new mall customer to an existing segment
+# =======================================================================
+# MEMBER 3 (Amiir): CLUSTERING
+# -----------------------------------------------------------------------
+# TODO (Amiir): replace the lecturer's mall customer model with OUR k-Means
+# model.
+#   1. Copy our saved file into model/ and change the filename below.
+#      If we saved the scaler and k-Means in separate files, load each one.
+#   2. Rename the URL: /api/v1/models/<our-model-name>/predictions
+#   3. Update the sample request, the response and the "model" text
+#      (our k and features). Add cluster names if our lab described them.
+#   4. If we did not scale, drop the scaler and call kmeans.predict(...)
+#      directly. Keep get_payload(...) and to_input_row(...).
+# =======================================================================
+clustering_artifact = load_artifact("kmeans_mall_customer_segmentation.joblib")
+clustering_scaler = clustering_artifact["scaler"]
+clustering_kmeans = clustering_artifact["kmeans"]
+CLUSTERING_FIELDS = expected_fields(clustering_scaler)
 
 # Sample request (cURL):
 #   curl -X POST http://127.0.0.1:5000/api/v1/models/mall-customer-segmenter/predictions \
 #        -H "Content-Type: application/json" \
 #        -d '{"Age": 27, "Annual Income (k$)": 45, "Spending Score (1-100)": 72}'
-#
-# Note: unlike the two Pipelines above, K-Means does not bundle its own
-# scaler, so this is the one endpoint where the scaling step is applied
-# explicitly (scaler.transform(...) then kmeans.predict(...)) -- exactly the
-# two-object pattern the clustering notebook persisted together for this
-# reason. There is still no manual encoding or feature engineering: the
-# three numeric fields are used exactly as the client sends them.
 @app.route("/api/v1/models/mall-customer-segmenter/predictions", methods=["POST"])
 def predict_customer_segment():
-    payload = request.get_json()
-    input_row = pd.DataFrame([payload])
+    payload = get_payload(CLUSTERING_FIELDS)
+    input_row = to_input_row(payload, CLUSTERING_FIELDS)
 
     scaled_input = clustering_scaler.transform(input_row)
     assigned_cluster = int(clustering_kmeans.predict(scaled_input)[0])
@@ -214,29 +245,41 @@ def predict_customer_segment():
     })
 
 
-# 4. ASSOCIATION RULE MINING -- recommend products for a shopping cart
+# =======================================================================
+# MEMBER 4 (Felista): ASSOCIATION RULE MINING (recommender)
+# -----------------------------------------------------------------------
+# TODO (Felista): replace the lecturer's e-commerce rules with OUR rules.
+#   1. Copy our saved file into model/ and change the filename below.
+#   2. Rename the URL: /api/v1/models/<our-model-name>/predictions
+#   3. If our artifact is shaped differently (e.g., an mlxtend rules
+#      DataFrame instead of a lookup dict, or no sku_lookup), adapt the
+#      matching loop and the product names. Keep the input checks.
+#   4. Update the sample requests with items that really appear in our
+#      rules, so a recommendation comes back.
+# =======================================================================
+arm_artifact = load_artifact("apriori_recommendation_rules.joblib")
+recommendation_lookup = arm_artifact["recommendation_lookup"]
+sku_lookup = arm_artifact["sku_lookup"]
 
 # Sample request (cURL):
 #   curl -X POST http://127.0.0.1:5000/api/v1/models/ecommerce-recommender/predictions \
 #        -H "Content-Type: application/json" \
 #        -d '{"cart": ["H06", "H07"]}'
-#
-#   curl -X POST http://127.0.0.1:5000/api/v1/models/ecommerce-recommender/predictions \
-#        -H "Content-Type: application/json" \
-#        -d '{"cart": ["P04", "P01"]}'
-#
-# Note: there is no scikit-learn ".predict()" here -- the mined association
-# rules were precomputed into a lookup dictionary
-# (antecedent SKU-set -> ranked candidate consequents)
-# during the notebook's persistence stage. This
-# endpoint performs the exact same lookup+rank step a production recommender
-# microservice would perform on every incoming request; it does not mine
-# for the rules again.
 @app.route("/api/v1/models/ecommerce-recommender/predictions", methods=["POST"])
 def recommend_products():
-    payload = request.get_json()
-    cart = set(payload.get("cart", []))
-    top_n = int(payload.get("top_n", 3))
+    payload = get_payload(["cart"])
+
+    cart_items = payload["cart"]
+    if not isinstance(cart_items, list) or not cart_items:
+        raise InputError("'cart' must be a non-empty list, e.g. [\"H06\", \"H07\"].")
+    cart = {str(item).strip() for item in cart_items}
+
+    try:
+        top_n = int(payload.get("top_n", 3))
+    except (TypeError, ValueError):
+        raise InputError("'top_n' must be a whole number, e.g. 3.")
+    if top_n < 1:
+        raise InputError("'top_n' must be 1 or more.")
 
     candidates = {}
     for antecedent, consequent_list in recommendation_lookup.items():
@@ -260,23 +303,48 @@ def recommend_products():
     return jsonify({
         "cart": sorted(cart),
         "recommendations": recommendations,
+        "message": "" if recommendations else "No rule matches this cart. Try other items.",
         "model": "Apriori association rules, cleaned + precomputed lookup",
     })
 
 
-# -----------------------------------------------------------------------
-# Entry point
-# -----------------------------------------------------------------------
+# =======================================================================
+# SHARED (Mariam): error handling -- every error is returned as JSON
+# =======================================================================
+@app.errorhandler(InputError)
+def handle_input_error(error):
+    return jsonify({"error": str(error)}), 400
+
+
+@app.errorhandler(HTTPException)
+def handle_http_error(error):
+    # 404 (unknown URL), 405 (wrong method, e.g. GET on a POST endpoint), etc.
+    return jsonify({"error": error.description, "status": error.code}), error.code
+
+
+@app.errorhandler(ValueError)
+@app.errorhandler(TypeError)
+@app.errorhandler(KeyError)
+def handle_bad_values(error):
+    # Raised by the model when a value has the wrong type or an unknown
+    # column/category, e.g. "abc" sent for a numeric field.
+    return jsonify({
+        "error": "The model could not use this input. Check the field names and value types.",
+        "details": str(error),
+    }), 400
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(error):
+    app.logger.exception("Unexpected error while handling a request")
+    return jsonify({"error": "Internal server error. Check the server logs."}), 500
+
+
+# =======================================================================
+# Entry point (development server only)
+# =======================================================================
 if __name__ == "__main__":
-    # Development server. debug=True gives auto-reload and an interactive
-    # debugger on errors -- convenient in class, but NEVER use debug=True in
-    # a deployed/public environment (it can expose a remote code execution
-    # console to anyone who can reach the server).
+    # Docker and Render run this app with Gunicorn instead, which imports
+    # `app` directly and never runs this block. debug=True gives auto-reload
+    # and an interactive debugger -- NEVER use it on a public server.
     app.run(debug=True)
-
-    # Production-style alternative (no debugger, no auto-reload):
-    # app.run(debug=False, host="0.0.0.0", port=5000)
-
-    # HTTPS/TLS alternative for local development (requires a self-signed
-    # certificate; see app_server_reverse_proxy_server_setup.md):
-    # app.run(debug=False, ssl_context=("cert.pem", "key.pem"))
