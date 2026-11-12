@@ -164,48 +164,59 @@ def predict_revenue():
 
 # =======================================================================
 # MEMBER 2 (Stephanie): CLASSIFICATION
-# -----------------------------------------------------------------------
-# TODO (Stephanie): replace the lecturer's SME credit risk model with OUR
-# classifier.
-#   1. Copy our saved file into model/ and change the filename below.
-#   2. Rename the URL: /api/v1/models/<our-model-name>/predictions
-#   3. Update the sample request, the response keys and the "model" text.
-#   4. "model" in named_steps["model"] must match the step name used in
-#      our Pipeline. If our model has no predict_proba, drop the
-#      probabilities.
-#   5. Keep get_payload(...) and to_input_row(...) as they are.
 # =======================================================================
-classification_pipeline = load_artifact("svc_classifier_for_sme_credit_risk.joblib")
-CLASSIFICATION_FIELDS = expected_fields(classification_pipeline)
+classification_artifact = load_artifact("fraud_model_bundle.joblib")
+classification_pipeline = classification_artifact["model"]
+CLASSIFICATION_MODEL_NAME = classification_artifact.get(
+    "model_name", "Tuned Logistic Regression"
+)
+CLASSIFICATION_THRESHOLD = float(classification_artifact["threshold"])
+CLASSIFICATION_FIELDS = list(
+    classification_artifact.get("features")
+    or expected_fields(classification_pipeline)
+)
 
 # Sample request (cURL):
-#   curl -X POST http://127.0.0.1:5000/api/v1/models/sme-credit-risk-classifier/predictions \
+#   curl -X POST http://127.0.0.1:5000/api/v1/models/insurance-fraud-classifier/predictions \
 #        -H "Content-Type: application/json" \
-#        -d '{"sector": "Retail", "county": "Nairobi", "quarter": "Q2",
-#             "loan_purpose": "Working Capital", "owner_education_level": "Secondary",
-#             "business_age_years": 2.1, "num_employees": 4,
-#             "monthly_revenue_kes": 850000, "loan_amount_kes": 150000,
-#             "loan_term_months": 12, "interest_rate_pct": 16.5,
-#             "collateral_value_kes": null, "debt_to_income_ratio": 0.62,
-#             "credit_score": 590, "num_previous_loans": 1,
-#             "missed_payments_count": 3, "online_presence_score": 40.0,
-#             "customer_satisfaction_score": 3.4, "competitor_density": 6}'
-@app.route("/api/v1/models/sme-credit-risk-classifier/predictions", methods=["POST"])
+#        -d '{"policy_type": "Comprehensive", "claim_type": "Collision",
+#             "incident_location_type": "Highway", "witnesses_present": "No",
+#             "agent_flagged_history": "Yes", "police_report_filed": "No",
+#             "claimant_age": 34, "policy_tenure_years": 1.2,
+#             "prior_claims_count": 3, "days_to_report_claim": 18,
+#             "claim_amount_kes": 480000.0,
+#             "claim_amount_to_policy_limit_ratio": 0.92,
+#             "customer_credit_score": 540.0}'
+@app.route("/api/v1/models/insurance-fraud-classifier/predictions", methods=["POST"])
 def predict_credit_risk():
     payload = get_payload(CLASSIFICATION_FIELDS)
-    input_row = to_input_row(payload, CLASSIFICATION_FIELDS)
+    # Convert JSON null (Python None) to np.nan so SimpleImputer handles missingness
+    cleaned_payload = {
+        key: (np.nan if val is None else val) for key, val in payload.items()
+    }
+    input_row = to_input_row(cleaned_payload, CLASSIFICATION_FIELDS)
 
-    predicted_class = classification_pipeline.predict(input_row)[0]
-    predicted_probabilities = classification_pipeline.predict_proba(input_row)[0]
-    class_labels = classification_pipeline.named_steps["model"].classes_
+    probabilities = classification_pipeline.predict_proba(input_row)[0]
+    class_labels = list(classification_pipeline.classes_)
+    fraud_idx = class_labels.index(1) if 1 in class_labels else 1
+
+    fraud_probability = float(probabilities[fraud_idx])
+    legit_probability = float(probabilities[1 - fraud_idx])
+    is_fraud = fraud_probability >= CLASSIFICATION_THRESHOLD
 
     return jsonify({
-        "predicted_credit_risk_category": str(predicted_class),
+        "predicted_claim_status": "Fraudulent" if is_fraud else "Legitimate",
+        "is_fraud": bool(is_fraud),
+        "fraud_probability": round(fraud_probability, 4),
+        "decision_threshold": CLASSIFICATION_THRESHOLD,
         "class_probabilities": {
-            str(label): round(float(prob), 4)
-            for label, prob in zip(class_labels, predicted_probabilities)
+            "Legitimate": round(legit_probability, 4),
+            "Fraudulent": round(fraud_probability, 4),
         },
-        "model": "Support Vector Classifier (tuned, SMOTE-resampled at training only)",
+        "model": (
+            f"{CLASSIFICATION_MODEL_NAME} "
+            f"(SMOTE-resampled at training, threshold={CLASSIFICATION_THRESHOLD:.2f})"
+        ),
     })
 
 
