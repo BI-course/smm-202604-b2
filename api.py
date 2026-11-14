@@ -125,7 +125,8 @@ def health():
 # MEMBER 1 (Lisa): REGRESSION
 # -----------------------------------------------------------------------
 # TODO (Lisa): replace the lecturer's SME revenue model with OUR regressor.
-#   1. Copy our saved file into model/ and change the filename below.
+1. #   Copy our saved file into model/ and change the filename below.
+
 #   2. Rename the URL to describe our model:
 #      /api/v1/models/<our-model-name>/predictions
 #   3. Update the sample request, the response keys and the "model" text.
@@ -247,31 +248,22 @@ def predict_customer_segment():
 
 # =======================================================================
 # MEMBER 4 (Felista): ASSOCIATION RULE MINING (recommender)
-# -----------------------------------------------------------------------
-# TODO (Felista): replace the lecturer's e-commerce rules with OUR rules.
-#   1. Copy our saved file into model/ and change the filename below.
-#   2. Rename the URL: /api/v1/models/<our-model-name>/predictions
-#   3. If our artifact is shaped differently (e.g., an mlxtend rules
-#      DataFrame instead of a lookup dict, or no sku_lookup), adapt the
-#      matching loop and the product names. Keep the input checks.
-#   4. Update the sample requests with items that really appear in our
-#      rules, so a recommendation comes back.
 # =======================================================================
-arm_artifact = load_artifact("apriori_recommendation_rules.joblib")
+arm_artifact = load_artifact("arm_pharmacy_basket_rules.joblib")
 recommendation_lookup = arm_artifact["recommendation_lookup"]
 sku_lookup = arm_artifact["sku_lookup"]
 
 # Sample request (cURL):
-#   curl -X POST http://127.0.0.1:5000/api/v1/models/ecommerce-recommender/predictions \
+#   curl -X POST http://127.0.0.1:5000/api/v1/models/pharmacy-recommender/predictions \
 #        -H "Content-Type: application/json" \
-#        -d '{"cart": ["H06", "H07"]}'
-@app.route("/api/v1/models/ecommerce-recommender/predictions", methods=["POST"])
+#        -d '{"cart": ["D05", "D04"]}'
+@app.route("/api/v1/models/pharmacy-recommender/predictions", methods=["POST"])
 def recommend_products():
     payload = get_payload(["cart"])
 
     cart_items = payload["cart"]
     if not isinstance(cart_items, list) or not cart_items:
-        raise InputError("'cart' must be a non-empty list, e.g. [\"H06\", \"H07\"].")
+        raise InputError("'cart' must be a non-empty list, e.g. [\"D05\", \"D04\"].")
     cart = {str(item).strip() for item in cart_items}
 
     try:
@@ -293,7 +285,7 @@ def recommend_products():
     recommendations = [
         {
             "sku": str(sku),
-            "product_name": sku_lookup.loc[sku, "product_name"],
+            "product_name": sku_lookup.get(sku, str(sku)),
             "confidence": round(float(confidence), 3),
             "lift": round(float(lift), 2),
         }
@@ -304,7 +296,7 @@ def recommend_products():
         "cart": sorted(cart),
         "recommendations": recommendations,
         "message": "" if recommendations else "No rule matches this cart. Try other items.",
-        "model": "Apriori association rules, cleaned + precomputed lookup",
+        "model": "Apriori pharmacy basket association rules (precomputed lookup)",
     })
 
 
