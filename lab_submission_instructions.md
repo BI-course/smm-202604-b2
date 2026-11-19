@@ -38,11 +38,11 @@
 
 **Member 5:**
 
-| **Details**                                                                                                                           | **Comment** |
-|:--------------------------------------------------------------------------------------------------------------------------------------|:------------|
-| **Student ID**                                                                                                                        |             |
-| **Name**                                                                                                                              |             |
-| **What part of the lab did you personally<br/>contribute to (provide a link to the<br/>branch(es)), and what did you learn from it?** |             |
+| **Details**                                                                                                                            | **Comment** |
+|:---------------------------------------------------------------------------------------------------------------------------------------|:------------|
+| **Student ID**                                                                                                                         | 165885      |
+| **Name**                                                                                                                               | Ian Kambo   |
+| **What part of the lab did you personally<br/>contribute to (provide a link to the<br/>branch(es)), and what did you learn from it? ** |Branch: https://github.com/BI-course/smm-202604-b2/tree/feature/member5-docker-nginx — I ran and tested our four models in the Docker setup: Flask served by Gunicorn (5 workers) behind an Nginx reverse proxy over HTTPS with a self-signed certificate, with HTTP redirected to HTTPS and only /api/ requests forwarded to Gunicorn. I rebuilt the API image as each member merged their model and wrote tests/smoke_test.sh, which sends one request per endpoint plus missing-input, wrong-method and unknown-URL checks, and works against local Flask, Docker or Render. I learned that the model files are baked into the image, so the API container must be rebuilt after every model change, and that the "Server: nginx" header and Gunicorn's "Booting worker" logs prove requests go through the reverse proxy rather than the Flask development server.             |
 
 **Member 7:**
 
