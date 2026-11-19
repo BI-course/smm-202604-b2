@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Serving ML Models</title>
+<title>BBT 4206 Model Console</title>
 <style>
   :root {
     --bg: #f3f4f6;
@@ -102,83 +102,248 @@
   .c4 { --dot: #ea580c; } .c4 .tag { background: #fff7ed; color: #c2410c; }
 
   footer { text-align: center; font-size: 12px; color: var(--muted); padding: 24px 16px 48px; }
+  body.console { display: block; min-height: 100vh; padding: 0; background: #f5f7f6; color: #172b26; font-family: "Segoe UI", sans-serif; }
+  .console-header { background: #173c32; color: #f3f7f3; padding: 26px max(20px, calc((100vw - 1120px) / 2)); text-align: left; }
+  .console-header .eyebrow { color: #a9c8b7; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+  .console-header h1 { font-size: 26px; margin: 7px 0 4px; }
+  .console-header p { color: #d2e3da; margin: 0; font-size: 14px; }
+  .console-main { max-width: 1120px; margin: 24px auto 0; padding: 0 20px; }
+  .console-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; border-bottom: 1px solid #d5dfd9; padding-bottom: 18px; }
+  .api-field { flex: 1 1 360px; }
+  .api-field label, .model-form label { display: block; color: #40574f; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+  .api-field input, .model-form input { width: 100%; min-height: 40px; border: 1px solid #c8d4cd; border-radius: 4px; padding: 8px 10px; background: #fff; color: #172b26; font: inherit; }
+  .api-field input:focus, .model-form input:focus { outline: 2px solid #258264; outline-offset: 1px; }
+  .status-line { min-height: 20px; color: #52665d; font-size: 13px; }
+  .status-line[data-state="ok"] { color: #176345; }
+  .status-line[data-state="error"] { color: #a3332a; }
+  .model-tabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 18px 0; }
+  .model-tabs button, .model-form button { min-height: 40px; border: 1px solid #b8c9bf; border-radius: 4px; padding: 8px 14px; background: #fff; color: #23463b; font: inherit; cursor: pointer; }
+  .model-tabs button[aria-selected="true"] { background: #236a52; border-color: #236a52; color: #fff; }
+  .model-tabs button:disabled { background: #e8ede9; color: #6a7972; cursor: not-allowed; }
+  .workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 0.8fr); gap: 24px; align-items: start; }
+  .workspace h2 { margin: 0 0 8px; font-size: 20px; }
+  .model-description { margin: 0 0 18px; color: #61736b; font-size: 14px; }
+  .model-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .model-form .field { min-width: 0; }
+  .model-form .field.wide { grid-column: 1 / -1; }
+  .model-form button { grid-column: 1 / -1; justify-self: start; background: #236a52; border-color: #236a52; color: #fff; }
+  .model-form button:disabled { opacity: 0.65; cursor: wait; }
+  .result-panel { border-left: 3px solid #83a993; padding: 0 0 0 16px; min-height: 120px; }
+  .result-panel h3 { margin: 0 0 8px; font-size: 14px; }
+  .result-panel pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: #243d34; font-size: 13px; }
+  .pending { padding: 14px; border-left: 3px solid #bd8e3f; background: #f4eee2; color: #59451f; font-size: 14px; }
+  .console-footer { max-width: 1120px; margin: 30px auto 0; padding: 18px 20px 36px; border-top: 1px solid #d5dfd9; color: #61736b; font-size: 13px; }
+  .console-footer a { color: #176345; }
+  @media (max-width: 720px) { .workspace { grid-template-columns: 1fr; } .model-form { grid-template-columns: 1fr; } .model-form .field.wide { grid-column: auto; } .console-header h1 { font-size: 22px; } }
 </style>
 </head>
-<body>
-
-<header>
-  <h1>Serving Machine Learning Models through a RESTish API using Flask in Python</h1>
-  <p>BBT 4206 &middot; Business Intelligence II &middot; Week 4-6 of 13</p>
+<body class="console">
+<header class="console-header">
+  <div class="eyebrow">BBT 4206 · Model validation</div>
+  <h1>Model Console</h1>
+  <p>Live predictions from the team API</p>
 </header>
-
-<main>
-  <div class="info-card">
-    <dl class="info-grid">
-      <dt>Course Codes</dt><dd>BBT 4206</dd>
-      <dt>Course Name</dt><dd>BBT 4206: Business Intelligence II (Week 4-6 of 13)</dd>
-      <dt>Semester</dt><dd>September to December 2026</dd>
-      <dt>Lecturer</dt><dd>Allan Omondi</dd>
-      <dt>Contact</dt><dd>aomondi@strathmore.edu</dd>
-      <dt>Note</dt>
-      <dd>
-        The lecture contains both theory and practice. This forms part of the practice.
-        It is intended for educational purposes only.<br>
-        Recommended citation:
-        <a href="https://raw.githubusercontent.com/course-files/ServingMLModels/refs/heads/main/RecommendedCitation.bib" target="_blank">BibTeX</a>
-      </dd>
-    </dl>
-  </div>
-
-  <div class="info-card">
-    <h2 style="margin-top:0;">Request Flow</h2>
-    <img src="RequestFlow.jpg" alt="Request Flow Diagram" style="display:block; background:#fff; padding:16px; border:1px solid #ccc; max-width:60%; margin-bottom:24px;">
-    <ol class="flow-steps">
-      <li><strong>Client</strong> (Postman / cURL / one of the four frontends below)
-        <div style="color:var(--muted);">Sends a request to <code>https://yourdomain/api/...</code></div>
-      </li>
-      <li><strong>NGINX</strong> (reverse proxy)
-        <div style="color:var(--muted);">Terminates HTTPS, serves static files, forwards <code>/api/...</code> to Gunicorn.</div>
-      </li>
-      <li><strong>Gunicorn</strong> (ASGI server)
-        <div style="color:var(--muted);">Manages worker processes and translates HTTP into Python ASGI calls.</div>
-      </li>
-      <li><strong>Flask</strong> (this app, <code>api.py</code>)
-        <div style="color:var(--muted);">Routes the request to the matching <code>@app.route</code> and returns a response.</div>
-      </li>
-    </ol>
-    <span class="flow-arrow">Response returns: Flask &rarr; Gunicorn &rarr; NGINX &rarr; Client</span>
-  </div>
-
-  <h2>API Endpoints &amp; Sample Frontends</h2>
-  <div class="endpoint-grid">
-    <a class="endpoint-card c1" href="sme_revenue_regressor.html">
-      <span class="tag">Regression</span>
-      <h3>SME Revenue Predictor</h3>
-      <p>Predicts monthly revenue (KES) for an SME.</p>
-      <p><code>/api/v1/models/sme-revenue-regressor/predictions</code></p>
-    </a>
-    <a class="endpoint-card c2" href="sme_credit_risk_classifier.html">
-      <span class="tag">Classification</span>
-      <h3>Credit Risk Classifier</h3>
-      <p>Predicts an SME loan applicant's risk category.</p>
-      <p><code>/api/v1/models/sme-credit-risk-classifier/predictions</code></p>
-    </a>
-    <a class="endpoint-card c3" href="mall_customer_segmenter.html">
-      <span class="tag">Clustering</span>
-      <h3>Customer Segmenter</h3>
-      <p>Assigns a mall customer to one of five segments.</p>
-      <p><code>/api/v1/models/mall-customer-segmenter/predictions</code></p>
-    </a>
-    <a class="endpoint-card c4" href="ecommerce_recommender.html">
-      <span class="tag">Association Rules</span>
-      <h3>Cart Recommender</h3>
-      <p>Recommends products for a shopping cart.</p>
-      <p><code>/api/v1/models/ecommerce-recommender/predictions</code></p>
-    </a>
-  </div>
+<main class="console-main">
+  <section class="console-toolbar" aria-label="API connection">
+    <div class="api-field">
+      <label for="apiBase">API base URL</label>
+      <input id="apiBase" type="url" value="https://smm-202604-b2-fjh3.onrender.com" spellcheck="false">
+    </div>
+    <div id="apiStatus" class="status-line" role="status" aria-live="polite">Checking API…</div>
+  </section>
+  <nav class="model-tabs" role="tablist" aria-label="Model endpoint">
+    <button type="button" role="tab" data-model="regression" aria-selected="true">Exam score</button>
+    <button type="button" role="tab" data-model="classification" aria-selected="false">Fraud classification</button>
+    <button type="button" role="tab" data-model="clustering" aria-selected="false">Bank wealth segments</button>
+    <button type="button" role="tab" data-model="recommender" aria-selected="false">Pharmacy basket</button>
+  </nav>
+  <section class="workspace">
+    <div id="modelPanel" role="tabpanel"></div>
+    <aside class="result-panel" aria-live="polite">
+      <h3>Response</h3>
+      <pre id="result">Submit a request to see the JSON response.</pre>
+    </aside>
+  </section>
 </main>
+<footer class="console-footer">
+  The digital score can be left blank to use the selected region's training median. The sample requests are also in the
+  <a href="../postman/ml_api.postman_collection.json">Postman collection</a>.
+</footer>
+<script>
+  const models = {
+    regression: {
+      title: "Student exam score",
+      endpoint: "/api/v1/models/student-exam-score-regressor/predictions",
+      description: "Predict a final exam score from study and student background features.",
+      fields: [
+        ["major_subject", "Major subject", "text", "Engineering"],
+        ["parental_education_level", "Parental education", "text", "Bachelor's"],
+        ["internet_access_quality", "Internet access quality", "text", "Good"],
+        ["part_time_job", "Part-time job", "text", "No"],
+        ["study_group_participation", "Study group participation", "text", "Yes"],
+        ["study_hours_per_week", "Study hours per week", "number", 9.5],
+        ["attendance_rate_pct", "Attendance rate (%)", "number", 88],
+        ["previous_gpa", "Previous GPA", "number", 3.4],
+        ["sleep_hours_per_night", "Sleep hours per night", "number", 7],
+        ["extracurricular_activities_count", "Extracurricular activities", "number", 1],
+        ["stress_level_score", "Stress level score", "number", 5],
+        ["tutoring_hours_per_week", "Tutoring hours per week", "number", 2]
+      ]
+    },
+    classification: {
+      title: "Insurance fraud classification",
+      endpoint: "/api/v1/models/insurance-fraud-classifier/predictions",
+      description: "Estimate claim fraud probability and the threshold-based outcome.",
+      fields: [
+        ["policy_type", "Policy type", "text", "Comprehensive"],
+        ["claim_type", "Claim type", "text", "Collision"],
+        ["incident_location_type", "Incident location type", "text", "Highway"],
+        ["witnesses_present", "Witnesses present", "text", "No"],
+        ["agent_flagged_history", "Agent flagged history", "text", "Yes"],
+        ["police_report_filed", "Police report filed", "text", "No"],
+        ["claimant_age", "Claimant age", "number", 34],
+        ["policy_tenure_years", "Policy tenure (years)", "number", 1.2],
+        ["prior_claims_count", "Prior claims", "number", 3],
+        ["days_to_report_claim", "Days to report claim", "number", 18],
+        ["claim_amount_kes", "Claim amount (KES)", "number", 480000],
+        ["claim_amount_to_policy_limit_ratio", "Claim / policy-limit ratio", "number", 0.92],
+        ["customer_credit_score", "Customer credit score", "number", 540]
+      ]
+    },
+    clustering: {
+      title: "Bank wealth segmentation",
+      endpoint: "/api/v1/models/bank-wealth-segmenter/predictions",
+      description: "Assign an account to a behavior-based service segment.",
+      fields: [
+        ["account_balance_kes", "Account balance (KES)", "number", 2400000],
+        ["transactions_per_month", "Transactions per month", "number", 9],
+        ["years_as_customer", "Years as customer", "number", 11],
+        ["digital_banking_usage_score", "Digital usage score (0-100; optional)", "optional-number", 55],
+        ["branch_region", "Branch region (used if digital score is blank)", "optional-text", "Nairobi"]
+      ]
+    },
+    recommender: {
+      title: "Pharmacy basket recommendations",
+      endpoint: "/api/v1/models/pharmacy-recommender/predictions",
+      description: "Enter SKUs separated by commas. D05, D04 is a known matching basket.",
+      fields: [
+        ["cart", "Basket SKUs", "items", "D05, D04"],
+        ["top_n", "Number of recommendations", "number", 3]
+      ]
+    }
+  };
 
-<footer>Open any card above directly in your browser -- no web server required. Remember to start <code>api.py</code> first.</footer>
+  const panel = document.getElementById("modelPanel");
+  const result = document.getElementById("result");
+  const apiStatus = document.getElementById("apiStatus");
+  let activeModel = "regression";
 
+  function renderModel(name) {
+    activeModel = name;
+    document.querySelectorAll(".model-tabs [role='tab']").forEach((tab) => {
+      tab.setAttribute("aria-selected", String(tab.dataset.model === name));
+    });
+    const config = models[name];
+    panel.innerHTML = `<h2>${config.title}</h2><p class="model-description">${config.description}<br><code>POST ${config.endpoint}</code></p>`;
+    const form = document.createElement("form");
+    form.className = "model-form";
+    config.fields.forEach(([key, labelText, kind, value]) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "field" + (kind === "items" ? " wide" : "");
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      const inputId = `field-${key}`;
+      label.htmlFor = inputId;
+      label.textContent = labelText;
+      input.id = inputId;
+      input.name = key;
+      input.required = kind !== "optional-number" && kind !== "optional-text";
+      if (kind === "number" || kind === "optional-number") {
+        input.type = "number";
+        input.step = "any";
+      } else {
+        input.type = "text";
+      }
+      input.value = value;
+      wrapper.append(label, input);
+      form.appendChild(wrapper);
+    });
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.textContent = name === "recommender" ? "Get recommendations" : "Run prediction";
+    form.appendChild(submit);
+    form.addEventListener("submit", sendRequest);
+    panel.appendChild(form);
+    result.textContent = "Submit a request to see the JSON response.";
+  }
+
+  async function sendRequest(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submit = form.querySelector("button[type='submit']");
+    const config = models[activeModel];
+    const payload = {};
+    for (const [key, , kind] of config.fields) {
+      const rawValue = form.elements[key].value.trim();
+      if (rawValue === "" && kind === "optional-number") {
+        payload[key] = null;
+      } else if (rawValue === "" && kind === "optional-text") {
+        continue;
+      } else if (rawValue === "") {
+        result.textContent = JSON.stringify({ error: `Please fill in ${key}.` }, null, 2);
+        return;
+      } else if (kind === "number" || kind === "optional-number") {
+        payload[key] = Number(rawValue);
+      } else if (kind === "items") {
+        payload[key] = rawValue.split(",").map((item) => item.trim()).filter(Boolean);
+      } else {
+        payload[key] = rawValue;
+      }
+    }
+    if (activeModel === "recommender" && payload.cart.length === 0) {
+      result.textContent = JSON.stringify({ error: "Enter at least one SKU." }, null, 2);
+      return;
+    }
+    const base = document.getElementById("apiBase").value.trim().replace(/\/$/, "");
+    submit.disabled = true;
+    submit.textContent = "Requesting…";
+    try {
+      const response = await fetch(base + config.endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      result.textContent = JSON.stringify(data, null, 2);
+    } catch (error) {
+      result.textContent = JSON.stringify({ error: `Could not reach the API: ${error.message}` }, null, 2);
+    } finally {
+      submit.disabled = false;
+      submit.textContent = activeModel === "recommender" ? "Get recommendations" : "Run prediction";
+    }
+  }
+
+  document.querySelectorAll(".model-tabs [data-model]").forEach((tab) => {
+    tab.addEventListener("click", () => renderModel(tab.dataset.model));
+  });
+  async function checkApi() {
+    const base = document.getElementById("apiBase").value.trim().replace(/\/$/, "");
+    apiStatus.dataset.state = "";
+    apiStatus.textContent = "Checking API…";
+    try {
+      const response = await fetch(`${base}/api/v1/health`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const health = await response.json();
+      apiStatus.dataset.state = "ok";
+      apiStatus.textContent = `API online · ${health.prediction_endpoints.length} routes`;
+    } catch (error) {
+      apiStatus.dataset.state = "error";
+      apiStatus.textContent = `API unavailable · ${error.message}`;
+    }
+  }
+  document.getElementById("apiBase").addEventListener("change", checkApi);
+  renderModel("regression");
+  checkApi();
+</script>
 </body>
 </html>

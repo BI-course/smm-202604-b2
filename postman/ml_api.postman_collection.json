@@ -1,0 +1,329 @@
+{
+  "info": {
+    "name": "ML API (smm-202604-b2)",
+    "description": "Our group's four model endpoints. Change the collection variable base_url to switch between local (http://127.0.0.1:5000), Docker + Nginx (https://localhost) and Render (https://smm-202604-b2-fjh3.onrender.com).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://smm-202604-b2-fjh3.onrender.com",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Health check",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Lists 4 endpoints\", function () { pm.expect(pm.response.json().prediction_endpoints.length).to.eql(4); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/health",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "health"
+          ]
+        },
+        "description": "Lists every prediction endpoint."
+      }
+    },
+    {
+      "name": "1. Regression (Lisa): student exam score",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Response is JSON\", function () { pm.response.to.be.json; });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"major_subject\": \"Engineering\",\n  \"parental_education_level\": \"Bachelor's\",\n  \"internet_access_quality\": \"Good\",\n  \"part_time_job\": \"No\",\n  \"study_group_participation\": \"Yes\",\n  \"study_hours_per_week\": 9.5,\n  \"attendance_rate_pct\": 88.0,\n  \"previous_gpa\": 3.4,\n  \"sleep_hours_per_night\": 7.0,\n  \"extracurricular_activities_count\": 1,\n  \"stress_level_score\": 5.0,\n  \"tutoring_hours_per_week\": 2.0\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/models/student-exam-score-regressor/predictions",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "models",
+            "student-exam-score-regressor",
+            "predictions"
+          ]
+        },
+        "description": "Ridge regressor. Expected: a predicted final exam score."
+      }
+    },
+    {
+      "name": "2. Classification (Stephanie): insurance fraud",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Response is JSON\", function () { pm.response.to.be.json; });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"policy_type\": \"Comprehensive\",\n  \"claim_type\": \"Collision\",\n  \"incident_location_type\": \"Highway\",\n  \"witnesses_present\": \"No\",\n  \"agent_flagged_history\": \"Yes\",\n  \"police_report_filed\": \"No\",\n  \"claimant_age\": 34,\n  \"policy_tenure_years\": 1.2,\n  \"prior_claims_count\": 3,\n  \"days_to_report_claim\": 18,\n  \"claim_amount_kes\": 480000.0,\n  \"claim_amount_to_policy_limit_ratio\": 0.92,\n  \"customer_credit_score\": 540.0\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/models/insurance-fraud-classifier/predictions",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "models",
+            "insurance-fraud-classifier",
+            "predictions"
+          ]
+        },
+        "description": "Tuned logistic regression. Expected: Fraudulent / Legitimate with probabilities."
+      }
+    },
+    {
+      "name": "3. Clustering (Amiir): UPDATE AFTER MERGE",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Response is JSON\", function () { pm.response.to.be.json; });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"Age\": 27,\n  \"Annual Income (k$)\": 45,\n  \"Spending Score (1-100)\": 72\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/models/mall-customer-segmenter/predictions",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "models",
+            "mall-customer-segmenter",
+            "predictions"
+          ]
+        },
+        "description": "PLACEHOLDER: still the lecturer's model. Replace the URL and body with Amiir's once his pull request is merged."
+      }
+    },
+    {
+      "name": "4. Recommender (Felista): pharmacy basket",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Response is JSON\", function () { pm.response.to.be.json; });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cart\": [\n    \"D05\",\n    \"D04\"\n  ],\n  \"top_n\": 3\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/models/pharmacy-recommender/predictions",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "models",
+            "pharmacy-recommender",
+            "predictions"
+          ]
+        },
+        "description": "Apriori rules. Expected: Cold & Flu Syrup (D03)."
+      }
+    },
+    {
+      "name": "5. Error: missing fields",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 400\", function () { pm.response.to.have.status(400); });",
+              "pm.test(\"Response is JSON\", function () { pm.response.to.be.json; });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"study_hours_per_week\": 9.5\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/models/student-exam-score-regressor/predictions",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "models",
+            "student-exam-score-regressor",
+            "predictions"
+          ]
+        },
+        "description": "Expected 400: Missing input field(s): ..."
+      }
+    },
+    {
+      "name": "6. Error: empty cart",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status is 400\", function () { pm.response.to.have.status(400); });",
+              "pm.test(\"Response is JSON\", function () { pm.response.to.be.json; });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cart\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/models/pharmacy-recommender/predictions",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "models",
+            "pharmacy-recommender",
+            "predictions"
+          ]
+        },
+        "description": "Expected 400: 'cart' must be a non-empty list."
+      }
+    }
+  ]
+}

@@ -1,114 +1,151 @@
+import os
+
 import gradio as gr
 import joblib
 import numpy as np
 import pandas as pd
-import spaces
 
 # -----------------------------------------------------------------------
-# Hugging Face's free tier now provisions new Gradio Spaces on ZeroGPU
-# hardware only (see the note in Step 2 below). None of this app's four
-# models needs a GPU -- every prediction below runs on plain scikit-learn
-# arrays -- but some free-tier Spaces fail to start reliably unless at
-# least one function is decorated with @spaces.GPU. This function does
-# nothing GPU-related; it exists only to satisfy that platform check.
-# Calling it once, here, registers it before Gradio launches below.
-@spaces.GPU
-def _warm_zerogpu():
-    return None
-
-_warm_zerogpu()
-
+# Load the same saved artifacts as the API. Hugging Face receives a model/
+# copy; local runs can use the repository's root model/ folder.
 # -----------------------------------------------------------------------
-# Load all four persisted artifacts ONCE, at import time -- the same
-# principle api.py uses: load once at startup, reuse across every request
-# (here, across every tab and every submit click), never inside a function.
-# -----------------------------------------------------------------------
-regression_pipeline = joblib.load("lasso_regressor_for_sme_revenue.joblib")
-classification_pipeline = joblib.load("svc_classifier_for_sme_credit_risk.joblib")
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR = os.path.join(APP_DIR, "model")
+if not os.path.isdir(MODEL_DIR):
+    MODEL_DIR = os.path.abspath(os.path.join(APP_DIR, "..", "model"))
 
-clustering_artifact = joblib.load("kmeans_mall_customer_segmentation.joblib")
+clustering_artifact = joblib.load(
+    os.path.join(MODEL_DIR, "kmeans_bank_wealth_segmentation.joblib")
+)
 clustering_scaler = clustering_artifact["scaler"]
 clustering_kmeans = clustering_artifact["kmeans"]
+CLUSTERING_FEATURES = clustering_artifact["feature_order"]
+CLUSTER_REGION_MEDIANS = clustering_artifact["region_median_digital_score"]
+CLUSTER_NAMES = clustering_artifact["segment_names"]
 
-arm_artifact = joblib.load("apriori_recommendation_rules.joblib")
+def load_artifact(filename):
+    return joblib.load(os.path.join(MODEL_DIR, filename))
+
+
+regression_pipeline = load_artifact("student_exam_score_regressor.joblib")
+fraud_artifact = load_artifact("fraud_model_bundle.joblib")
+classification_pipeline = fraud_artifact["model"]
+classification_threshold = float(fraud_artifact["threshold"])
+arm_artifact = load_artifact("arm_pharmacy_basket_rules.joblib")
 recommendation_lookup = arm_artifact["recommendation_lookup"]
 sku_lookup = arm_artifact["sku_lookup"]
+REGRESSION_FIELDS = list(regression_pipeline.feature_names_in_)
+CLASSIFICATION_FIELDS = list(fraud_artifact["features"])
+
+REGRESSION_DEFAULTS = {
+    "major_subject": "Engineering", "parental_education_level": "Bachelor's",
+    "internet_access_quality": "Good", "part_time_job": "No",
+    "study_group_participation": "Yes", "study_hours_per_week": 9.5,
+    "attendance_rate_pct": 88.0, "previous_gpa": 3.4,
+    "sleep_hours_per_night": 7.0, "extracurricular_activities_count": 1,
+    "stress_level_score": 5.0, "tutoring_hours_per_week": 2.0,
+}
+CLASSIFICATION_DEFAULTS = {
+    "policy_type": "Comprehensive", "claim_type": "Collision",
+    "incident_location_type": "Highway", "witnesses_present": "No",
+    "agent_flagged_history": "Yes", "police_report_filed": "No",
+    "claimant_age": 34, "policy_tenure_years": 1.2,
+    "prior_claims_count": 3, "days_to_report_claim": 18,
+    "claim_amount_kes": 480000.0,
+    "claim_amount_to_policy_limit_ratio": 0.92, "customer_credit_score": 540.0,
+}
+
+
+def make_inputs(fields, defaults):
+    return [
+        gr.Textbox(label=field, value=defaults[field])
+        if isinstance(defaults[field], str)
+        else gr.Number(label=field, value=defaults[field])
+        for field in fields
+    ]
 
 
 # -----------------------------------------------------------------------
-# 1. Regression -- predict monthly revenue (KES) for an SME
+# 1. Regression -- predict a student's final exam score
 # -----------------------------------------------------------------------
-def predict_revenue(sector, county, quarter, business_age_years, num_employees,
-                     owner_education_level, monthly_marketing_spend_kes,
-                     avg_daily_foot_traffic, online_presence_score,
-                     loan_amount_kes, interest_rate_pct, inflation_rate_pct,
-                     competitor_density, customer_satisfaction_score):
-    payload = {
-        "sector": sector, "county": county, "quarter": quarter,
-        "business_age_years": business_age_years, "num_employees": num_employees,
-        "owner_education_level": owner_education_level,
-        "monthly_marketing_spend_kes": monthly_marketing_spend_kes,
-        # A Gradio Number field cannot submit a literal null; 0 is used here
-        # as a stand-in for "not applicable" when the field is left blank.
-        "avg_daily_foot_traffic": avg_daily_foot_traffic or None,
-        "online_presence_score": online_presence_score,
-        "loan_amount_kes": loan_amount_kes, "interest_rate_pct": interest_rate_pct,
-        "inflation_rate_pct": inflation_rate_pct,
-        "competitor_density": competitor_density,
-        "customer_satisfaction_score": customer_satisfaction_score,
+def predict_exam_score(*values):
+    row = pd.DataFrame([dict(zip(REGRESSION_FIELDS, values))])
+    prediction = float(regression_pipeline.predict(row)[0])
+    return {
+        "model": "student_exam_score_regressor",
+        "predicted_final_exam_score": round(prediction, 2),
     }
-    input_row = pd.DataFrame([payload])
-    predicted_log_revenue = regression_pipeline.predict(input_row)[0]
-    predicted_revenue_kes = float(np.expm1(predicted_log_revenue))
-    return f"KES {predicted_revenue_kes:,.2f} / month"
 
 
 # -----------------------------------------------------------------------
-# 2. Classification -- predict SME credit risk category
+# 2. Classification -- predict insurance claim fraud
 # -----------------------------------------------------------------------
-def predict_credit_risk(sector, county, quarter, loan_purpose, owner_education_level,
-                         business_age_years, num_employees, monthly_revenue_kes,
-                         loan_amount_kes, loan_term_months, interest_rate_pct,
-                         collateral_value_kes, debt_to_income_ratio, credit_score,
-                         num_previous_loans, missed_payments_count,
-                         online_presence_score, customer_satisfaction_score,
-                         competitor_density):
-    payload = {
-        "sector": sector, "county": county, "quarter": quarter,
-        "loan_purpose": loan_purpose, "owner_education_level": owner_education_level,
-        "business_age_years": business_age_years, "num_employees": num_employees,
-        "monthly_revenue_kes": monthly_revenue_kes, "loan_amount_kes": loan_amount_kes,
-        "loan_term_months": loan_term_months, "interest_rate_pct": interest_rate_pct,
-        "collateral_value_kes": collateral_value_kes or None,
-        "debt_to_income_ratio": debt_to_income_ratio, "credit_score": credit_score,
-        "num_previous_loans": num_previous_loans,
-        "missed_payments_count": missed_payments_count,
-        "online_presence_score": online_presence_score,
-        "customer_satisfaction_score": customer_satisfaction_score,
-        "competitor_density": competitor_density,
+def predict_fraud(*values):
+    row = pd.DataFrame([dict(zip(CLASSIFICATION_FIELDS, values))])
+    probabilities = classification_pipeline.predict_proba(row)[0]
+    class_labels = list(classification_pipeline.classes_)
+    fraud_index = class_labels.index(1) if 1 in class_labels else 1
+    fraud_probability = float(probabilities[fraud_index])
+    legit_probability = float(probabilities[1 - fraud_index])
+    is_fraud = fraud_probability >= classification_threshold
+    return {
+        "model": fraud_artifact.get("model_name", "Insurance fraud classifier"),
+        "predicted_claim_status": "Fraudulent" if is_fraud else "Legitimate",
+        "is_fraud": is_fraud,
+        "fraud_probability": round(fraud_probability, 4),
+        "decision_threshold": classification_threshold,
+        "class_probabilities": {
+            "Legitimate": round(legit_probability, 4),
+            "Fraudulent": round(fraud_probability, 4),
+        },
     }
-    input_row = pd.DataFrame([payload])
-    predicted_class = classification_pipeline.predict(input_row)[0]
-    predicted_probabilities = classification_pipeline.predict_proba(input_row)[0]
-    class_labels = classification_pipeline.named_steps["model"].classes_
-    probability_lines = "\n".join(
-        f"  {label}: {prob:.1%}" for label, prob in zip(class_labels, predicted_probabilities)
-    )
-    return f"Predicted category: {predicted_class}\n\n{probability_lines}"
 
 
 # -----------------------------------------------------------------------
-# 3. Clustering -- assign a new mall customer to an existing segment
+# 3. Clustering -- assign a bank account to a wealth-management segment
 # -----------------------------------------------------------------------
-def predict_segment(age, annual_income_k, spending_score):
+def predict_segment(account_balance_kes, transactions_per_month, years_as_customer,
+                    digital_banking_usage_score, branch_region):
+    try:
+        account_balance = float(account_balance_kes)
+        transactions = float(transactions_per_month)
+        tenure = float(years_as_customer)
+        digital_score = (
+            None if digital_banking_usage_score is None
+            else float(digital_banking_usage_score)
+        )
+    except (TypeError, ValueError, OverflowError):
+        raise gr.Error("Enter numeric values; the digital score may be left blank.")
+
+    values = [account_balance, transactions, tenure]
+    if digital_score is not None:
+        values.append(digital_score)
+    if not np.isfinite(values).all():
+        raise gr.Error("Inputs must be finite numbers.")
+    if account_balance <= 0:
+        raise gr.Error("Account balance must be greater than zero.")
+    if transactions < 0 or tenure < 0:
+        raise gr.Error("Transactions and customer tenure cannot be negative.")
+    if digital_score is not None and not 0 <= digital_score <= 100:
+        raise gr.Error("Digital usage score must be between 0 and 100.")
+    if digital_score is None:
+        if branch_region not in CLUSTER_REGION_MEDIANS:
+            raise gr.Error("Choose a known branch region when the digital score is blank.")
+        digital_score = float(CLUSTER_REGION_MEDIANS[branch_region])
+
+    transformed_values = {
+        "log10_account_balance": float(np.log10(account_balance)),
+        "transactions_per_month": transactions,
+        "years_as_customer": tenure,
+        "digital_banking_usage_score": digital_score,
+    }
     input_row = pd.DataFrame([{
-        "Age": age,
-        "Annual Income (k$)": annual_income_k,
-        "Spending Score (1-100)": spending_score,
+        feature: transformed_values[feature] for feature in CLUSTERING_FEATURES
     }])
     scaled_input = clustering_scaler.transform(input_row)
     cluster = int(clustering_kmeans.predict(scaled_input)[0])
-    return f"Assigned segment: Cluster {cluster}"
+    cluster_name = CLUSTER_NAMES.get(cluster, f"Cluster {cluster}")
+    return f"{cluster_name} (cluster {cluster})"
 
 
 # -----------------------------------------------------------------------
@@ -116,6 +153,8 @@ def predict_segment(age, annual_income_k, spending_score):
 # -----------------------------------------------------------------------
 def recommend_products(cart_text, top_n):
     cart = {sku.strip() for sku in cart_text.split(",") if sku.strip()}
+    if not cart:
+        raise gr.Error("Enter at least one SKU, separated by commas.")
     candidates = {}
     for antecedent, consequent_list in recommendation_lookup.items():
         if antecedent.issubset(cart):
@@ -124,100 +163,68 @@ def recommend_products(cart_text, top_n):
                     if sku not in candidates or confidence > candidates[sku][0]:
                         candidates[sku] = (confidence, lift)
 
-    ranked = sorted(candidates.items(), key=lambda item: item[1][0], reverse=True)[:int(top_n)]
-    if not ranked:
-        return "No recommendations for this cart -- try a SKU combination seen in the training orders."
-
-    lines = [
-        f"{sku_lookup.loc[sku, 'product_name']} ({sku})  --  "
-        f"confidence {confidence:.1%}, lift {lift:.2f}"
-        for sku, (confidence, lift) in ranked
-    ]
-    return "\n".join(lines)
+    ranked = sorted(candidates.items(), key=lambda item: item[1][0], reverse=True)
+    return {
+        "model": "pharmacy association rules",
+        "cart": sorted(cart),
+        "recommendations": [
+            {
+                "sku": str(sku),
+                "product_name": sku_lookup.get(sku, str(sku)),
+                "confidence": round(float(confidence), 3),
+                "lift": round(float(lift), 2),
+            }
+            for sku, (confidence, lift) in ranked[:int(top_n)]
+        ],
+        "message": "" if ranked else "No rule matches this cart. Try other items.",
+    }
 
 
 # -----------------------------------------------------------------------
-# One gr.Blocks() app, four gr.Tab()s -- one shared Space URL, no linking
-# between separately-hosted demos required.
+# One Gradio app with one tab per model.
 # -----------------------------------------------------------------------
-with gr.Blocks(title="BBT 4206 Model Validation Demos") as demo:
-    gr.Markdown("# BBT 4206 -- Model Validation Demos\nSwitch tabs to try a different model.")
+with gr.Blocks(title="BBT 4206 Model Demos") as demo:
+    gr.Markdown("# BBT 4206 Model Demos")
 
-    with gr.Tab("SME Revenue Regressor"):
+    with gr.Tab("Exam score"):
         gr.Interface(
-            fn=predict_revenue,
-            inputs=[
-                gr.Textbox(label="Sector", value="Technology"),
-                gr.Textbox(label="County", value="Nairobi"),
-                gr.Textbox(label="Quarter", value="Q3"),
-                gr.Number(label="Business Age (years)", value=4.5),
-                gr.Number(label="Number of Employees", value=12),
-                # These four categories are the exact set the pipeline's
-                # OrdinalEncoder was fitted on -- any other string raises
-                # "Found unknown categories" at predict time.
-                gr.Dropdown(label="Owner Education Level",
-                            choices=["Primary", "Secondary", "Tertiary", "Postgraduate"],
-                            value="Secondary"),
-                gr.Number(label="Monthly Marketing Spend (KES)", value=45000),
-                gr.Number(label="Avg Daily Foot Traffic (leave 0 if not applicable)", value=0),
-                gr.Number(label="Online Presence Score", value=78.0),
-                gr.Number(label="Loan Amount (KES)", value=250000),
-                gr.Number(label="Interest Rate (%)", value=14.5),
-                gr.Number(label="Inflation Rate (%)", value=6.5),
-                gr.Number(label="Competitor Density", value=5),
-                gr.Number(label="Customer Satisfaction Score", value=4.2),
-            ],
-            outputs=gr.Textbox(label="Predicted Monthly Revenue"),
+            fn=predict_exam_score,
+            inputs=make_inputs(REGRESSION_FIELDS, REGRESSION_DEFAULTS),
+            outputs=gr.JSON(label="Prediction"),
         )
 
-    with gr.Tab("SME Credit Risk Classifier"):
+    with gr.Tab("Fraud classification"):
         gr.Interface(
-            fn=predict_credit_risk,
-            inputs=[
-                gr.Textbox(label="Sector", value="Retail"),
-                gr.Textbox(label="County", value="Nairobi"),
-                gr.Textbox(label="Quarter", value="Q2"),
-                gr.Textbox(label="Loan Purpose", value="Working Capital"),
-                gr.Dropdown(label="Owner Education Level",
-                            choices=["Primary", "Secondary", "Tertiary", "Postgraduate"],
-                            value="Secondary"),
-                gr.Number(label="Business Age (years)", value=2.1),
-                gr.Number(label="Number of Employees", value=4),
-                gr.Number(label="Monthly Revenue (KES)", value=850000),
-                gr.Number(label="Loan Amount (KES)", value=150000),
-                gr.Number(label="Loan Term (months)", value=12),
-                gr.Number(label="Interest Rate (%)", value=16.5),
-                gr.Number(label="Collateral Value (leave 0 if unsecured)", value=0),
-                gr.Number(label="Debt-to-Income Ratio", value=0.62),
-                gr.Number(label="Credit Score", value=590),
-                gr.Number(label="Number of Previous Loans", value=1),
-                gr.Number(label="Missed Payments Count", value=3),
-                gr.Number(label="Online Presence Score", value=40.0),
-                gr.Number(label="Customer Satisfaction Score", value=3.4),
-                gr.Number(label="Competitor Density", value=6),
-            ],
-            outputs=gr.Textbox(label="Predicted Credit Risk Category"),
+            fn=predict_fraud,
+            inputs=make_inputs(CLASSIFICATION_FIELDS, CLASSIFICATION_DEFAULTS),
+            outputs=gr.JSON(label="Prediction"),
         )
 
-    with gr.Tab("Mall Customer Segmenter"):
+    with gr.Tab("Bank Wealth Segmenter"):
         gr.Interface(
             fn=predict_segment,
             inputs=[
-                gr.Number(label="Age", value=27),
-                gr.Number(label="Annual Income (k$)", value=45),
-                gr.Number(label="Spending Score (1-100)", value=72),
+                gr.Number(label="Account Balance (KES)", value=2400000),
+                gr.Number(label="Transactions per Month", value=9),
+                gr.Number(label="Years as Customer", value=11),
+                gr.Number(label="Digital Banking Usage Score (leave blank if unknown)", value=55),
+                gr.Dropdown(
+                    label="Branch Region",
+                    choices=sorted(CLUSTER_REGION_MEDIANS),
+                    value="Nairobi",
+                ),
             ],
-            outputs=gr.Textbox(label="Prediction"),
+            outputs=gr.Textbox(label="Assigned Segment"),
         )
 
-    with gr.Tab("E-commerce Recommender"):
+    with gr.Tab("Pharmacy recommender"):
         gr.Interface(
             fn=recommend_products,
             inputs=[
-                gr.Textbox(label="Cart (comma-separated SKUs)", value="H06, H07"),
-                gr.Number(label="Top N Recommendations", value=3),
+                gr.Textbox(label="Basket SKUs", value="D05, D04"),
+                gr.Slider(1, 10, value=3, step=1, label="Recommendations"),
             ],
-            outputs=gr.Textbox(label="Recommendations"),
+            outputs=gr.JSON(label="Recommendations"),
         )
 
 if __name__ == "__main__":

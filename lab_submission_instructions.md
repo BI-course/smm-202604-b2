@@ -25,8 +25,8 @@
 | **Details**                                                                                                                           | **Comment** |
 |:--------------------------------------------------------------------------------------------------------------------------------------|:------------|
 | **Student ID**                                                                                                                        |             |
-| **Name**                                                                                                                              |             |
-| **What part of the lab did you personally<br/>contribute to (provide a link to the<br/>branch(es)), and what did you learn from it?** |             |
+| **Name**                                                                                                                              | Amiir Ibrahim |
+| **What part of the lab did you personally<br/>contribute to (provide a link to the<br/>branch(es)), and what did you learn from it?** | I contributed the clustering model work for the mall customer segmenter by implementing the K-Means prediction route in `api.py` and validating it with a live API request. My work was committed on the `feature/member3-submission` branch. I learned that unsupervised models still need the same preprocessing at inference time, especially scaling, and that the API is the actual delivery layer for the model. |
 
 **Member 4:**
 
@@ -44,9 +44,17 @@
 | **Name**                                                                                                                              |             |
 | **What part of the lab did you personally<br/>contribute to (provide a link to the<br/>branch(es)), and what did you learn from it?** |             |
 
+**Member 7:**
+
+| **Details**                                                                                                                           | **Comment** |
+|:--------------------------------------------------------------------------------------------------------------------------------------|:------------|
+| **Student ID**                                                                                                                        | 166110            |
+| **Name**                                                                                                                              | Victor Macharia            |
+| **What part of the lab did you personally<br/>contribute to (provide a link to the<br/>branch(es)), and what did you learn from it?** | https://github.com/BI-course/smm-202604-b2/tree/feature/frontend-hf-streamlit     Built the HTML/CSS/JS front end in frontend/: an index page plus one page per model (revenue regression, credit risk classification, customer segmentation and e-commerce recommender) that call the Flask API with fetch(). I also wrote Python scripts (api_consumer.py) that call the API, and assembled the Gradio app for the Hugging Face Space and the Streamlit app. Learned that every platform must load the same saved model files with a matching scikit-learn version, and that CORS and the API base URL decide whether a page can reach the API from another origin.       |
+
 ## Chosen Level of Difficulty
 
-**Specify the chosen level of difficulty** (baseline, intermediate, or advanced):
+**Specify the chosen level of difficulty** (baseline, intermediate, or advanced): Intermediate
 
 ## Video Demonstration
 
@@ -70,7 +78,7 @@ Fill in only the rows that apply to your chosen difficulty level (see Part C bel
 
 | **Deployment target**                             | **URL** |
 |:--------------------------------------------------|:--------|
-| Render (the full `api.py`, all endpoints)         |         |
+| Render (the full `api.py`, all endpoints)         | https://smm-202604-b2.onrender.com |
 | Hugging Face Space (Gradio, one tab per model)    |         |
 | Streamlit Community Cloud app (one tab per model) |         |
 

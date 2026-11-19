@@ -123,155 +123,181 @@ def health():
 
 # =======================================================================
 # MEMBER 1 (Lisa): REGRESSION
-# -----------------------------------------------------------------------
-# TODO (Lisa): replace the lecturer's SME revenue model with OUR regressor.
-#   1. Copy our saved file into model/ and change the filename below.
-#   2. Rename the URL to describe our model:
-#      /api/v1/models/<our-model-name>/predictions
-#   3. Update the sample request, the response keys and the "model" text.
-#   4. Remove the np.expm1(...) step unless our model was ALSO trained on
-#      log1p(target).
-#   5. Keep get_payload(...) and to_input_row(...) as they are.
 # =======================================================================
-regression_pipeline = load_artifact("lasso_regressor_for_sme_revenue.joblib")
+regression_pipeline = load_artifact("student_exam_score_regressor.joblib")
 REGRESSION_FIELDS = expected_fields(regression_pipeline)
 
 # Sample request (cURL):
-#   curl -X POST http://127.0.0.1:5000/api/v1/models/sme-revenue-regressor/predictions \
+#   curl -X POST http://127.0.0.1:5000/api/v1/models/student-exam-score-regressor/predictions \
 #        -H "Content-Type: application/json" \
-#        -d '{"sector": "Technology", "county": "Nairobi", "quarter": "Q3",
-#             "business_age_years": 4.5, "num_employees": 12,
-#             "owner_education_level": "Secondary",
-#             "monthly_marketing_spend_kes": 45000,
-#             "avg_daily_foot_traffic": null,
-#             "online_presence_score": 78.0, "loan_amount_kes": 250000,
-#             "interest_rate_pct": 14.5, "inflation_rate_pct": 6.5,
-#             "competitor_density": 5, "customer_satisfaction_score": 4.2}'
-@app.route("/api/v1/models/sme-revenue-regressor/predictions", methods=["POST"])
+#        -d '{"major_subject": "Engineering", "parental_education_level": "Bachelor'\''s",
+#            "internet_access_quality": "Good", "part_time_job": "No",
+#            "study_group_participation": "Yes", "study_hours_per_week": 9.5,
+#            "attendance_rate_pct": 88.0, "previous_gpa": 3.4,
+#            "sleep_hours_per_night": 7.0, "extracurricular_activities_count": 1,
+#            "stress_level_score": 5.0, "tutoring_hours_per_week": 2.0}'
+@app.route("/api/v1/models/student-exam-score-regressor/predictions", methods=["POST"])
 def predict_revenue():
     payload = get_payload(REGRESSION_FIELDS)
     input_row = to_input_row(payload, REGRESSION_FIELDS)
 
-    predicted_log_revenue = regression_pipeline.predict(input_row)[0]
-    # Trained on log1p(revenue), so invert that to report KES.
-    predicted_revenue_kes = float(np.expm1(predicted_log_revenue))
+    # TransformedTargetRegressor automatically runs target_transformer.inverse_transform()
+    predicted_exam_score = float(regression_pipeline.predict(input_row)[0])
 
     return jsonify({
-        "predicted_monthly_revenue_kes": round(predicted_revenue_kes, 2),
-        "model": "Lasso Regressor",
+        "predicted_final_exam_score": round(predicted_exam_score, 2),
+        "model": "Ridge Regressor (with Yeo-Johnson target transformation)",
     })
 
 
 # =======================================================================
 # MEMBER 2 (Stephanie): CLASSIFICATION
-# -----------------------------------------------------------------------
-# TODO (Stephanie): replace the lecturer's SME credit risk model with OUR
-# classifier.
-#   1. Copy our saved file into model/ and change the filename below.
-#   2. Rename the URL: /api/v1/models/<our-model-name>/predictions
-#   3. Update the sample request, the response keys and the "model" text.
-#   4. "model" in named_steps["model"] must match the step name used in
-#      our Pipeline. If our model has no predict_proba, drop the
-#      probabilities.
-#   5. Keep get_payload(...) and to_input_row(...) as they are.
 # =======================================================================
-classification_pipeline = load_artifact("svc_classifier_for_sme_credit_risk.joblib")
-CLASSIFICATION_FIELDS = expected_fields(classification_pipeline)
+classification_artifact = load_artifact("fraud_model_bundle.joblib")
+classification_pipeline = classification_artifact["model"]
+CLASSIFICATION_MODEL_NAME = classification_artifact.get(
+    "model_name", "Tuned Logistic Regression"
+)
+CLASSIFICATION_THRESHOLD = float(classification_artifact["threshold"])
+CLASSIFICATION_FIELDS = list(
+    classification_artifact.get("features")
+    or expected_fields(classification_pipeline)
+)
 
 # Sample request (cURL):
-#   curl -X POST http://127.0.0.1:5000/api/v1/models/sme-credit-risk-classifier/predictions \
+#   curl -X POST http://127.0.0.1:5000/api/v1/models/insurance-fraud-classifier/predictions \
 #        -H "Content-Type: application/json" \
-#        -d '{"sector": "Retail", "county": "Nairobi", "quarter": "Q2",
-#             "loan_purpose": "Working Capital", "owner_education_level": "Secondary",
-#             "business_age_years": 2.1, "num_employees": 4,
-#             "monthly_revenue_kes": 850000, "loan_amount_kes": 150000,
-#             "loan_term_months": 12, "interest_rate_pct": 16.5,
-#             "collateral_value_kes": null, "debt_to_income_ratio": 0.62,
-#             "credit_score": 590, "num_previous_loans": 1,
-#             "missed_payments_count": 3, "online_presence_score": 40.0,
-#             "customer_satisfaction_score": 3.4, "competitor_density": 6}'
-@app.route("/api/v1/models/sme-credit-risk-classifier/predictions", methods=["POST"])
+#        -d '{"policy_type": "Comprehensive", "claim_type": "Collision",
+#             "incident_location_type": "Highway", "witnesses_present": "No",
+#             "agent_flagged_history": "Yes", "police_report_filed": "No",
+#             "claimant_age": 34, "policy_tenure_years": 1.2,
+#             "prior_claims_count": 3, "days_to_report_claim": 18,
+#             "claim_amount_kes": 480000.0,
+#             "claim_amount_to_policy_limit_ratio": 0.92,
+#             "customer_credit_score": 540.0}'
+@app.route("/api/v1/models/insurance-fraud-classifier/predictions", methods=["POST"])
 def predict_credit_risk():
     payload = get_payload(CLASSIFICATION_FIELDS)
-    input_row = to_input_row(payload, CLASSIFICATION_FIELDS)
+    # Convert JSON null (Python None) to np.nan so SimpleImputer handles missingness
+    cleaned_payload = {
+        key: (np.nan if val is None else val) for key, val in payload.items()
+    }
+    input_row = to_input_row(cleaned_payload, CLASSIFICATION_FIELDS)
 
-    predicted_class = classification_pipeline.predict(input_row)[0]
-    predicted_probabilities = classification_pipeline.predict_proba(input_row)[0]
-    class_labels = classification_pipeline.named_steps["model"].classes_
+    probabilities = classification_pipeline.predict_proba(input_row)[0]
+    class_labels = list(classification_pipeline.classes_)
+    fraud_idx = class_labels.index(1) if 1 in class_labels else 1
+
+    fraud_probability = float(probabilities[fraud_idx])
+    legit_probability = float(probabilities[1 - fraud_idx])
+    is_fraud = fraud_probability >= CLASSIFICATION_THRESHOLD
 
     return jsonify({
-        "predicted_credit_risk_category": str(predicted_class),
+        "predicted_claim_status": "Fraudulent" if is_fraud else "Legitimate",
+        "is_fraud": bool(is_fraud),
+        "fraud_probability": round(fraud_probability, 4),
+        "decision_threshold": CLASSIFICATION_THRESHOLD,
         "class_probabilities": {
-            str(label): round(float(prob), 4)
-            for label, prob in zip(class_labels, predicted_probabilities)
+            "Legitimate": round(legit_probability, 4),
+            "Fraudulent": round(fraud_probability, 4),
         },
-        "model": "Support Vector Classifier (tuned, SMOTE-resampled at training only)",
+        "model": (
+            f"{CLASSIFICATION_MODEL_NAME} "
+            f"(SMOTE-resampled at training, threshold={CLASSIFICATION_THRESHOLD:.2f})"
+        ),
     })
 
 
 # =======================================================================
 # MEMBER 3 (Amiir): CLUSTERING
 # -----------------------------------------------------------------------
-# TODO (Amiir): replace the lecturer's mall customer model with OUR k-Means
-# model.
-#   1. Copy our saved file into model/ and change the filename below.
-#      If we saved the scaler and k-Means in separate files, load each one.
-#   2. Rename the URL: /api/v1/models/<our-model-name>/predictions
-#   3. Update the sample request, the response and the "model" text
-#      (our k and features). Add cluster names if our lab described them.
-#   4. If we did not scale, drop the scaler and call kmeans.predict(...)
-#      directly. Keep get_payload(...) and to_input_row(...).
+# Load the bank wealth-management model and its training-time preprocessing.
 # =======================================================================
-clustering_artifact = load_artifact("kmeans_mall_customer_segmentation.joblib")
+clustering_artifact = load_artifact("kmeans_bank_wealth_segmentation.joblib")
 clustering_scaler = clustering_artifact["scaler"]
 clustering_kmeans = clustering_artifact["kmeans"]
-CLUSTERING_FIELDS = expected_fields(clustering_scaler)
+CLUSTERING_FEATURES = clustering_artifact["feature_order"]
+CLUSTER_REGION_MEDIANS = clustering_artifact["region_median_digital_score"]
+CLUSTER_NAMES = clustering_artifact["segment_names"]
+CLUSTERING_INPUT_FIELDS = [
+    "account_balance_kes",
+    "transactions_per_month",
+    "years_as_customer",
+    "digital_banking_usage_score",
+]
 
 # Sample request (cURL):
-#   curl -X POST http://127.0.0.1:5000/api/v1/models/mall-customer-segmenter/predictions \
+#   curl -X POST http://127.0.0.1:5000/api/v1/models/bank-wealth-segmenter/predictions \
 #        -H "Content-Type: application/json" \
-#        -d '{"Age": 27, "Annual Income (k$)": 45, "Spending Score (1-100)": 72}'
-@app.route("/api/v1/models/mall-customer-segmenter/predictions", methods=["POST"])
+#        -d '{"account_balance_kes": 2400000, "transactions_per_month": 9, \
+#             "years_as_customer": 11, "digital_banking_usage_score": 55}'
+@app.route("/api/v1/models/bank-wealth-segmenter/predictions", methods=["POST"])
 def predict_customer_segment():
-    payload = get_payload(CLUSTERING_FIELDS)
-    input_row = to_input_row(payload, CLUSTERING_FIELDS)
+    payload = get_payload(CLUSTERING_INPUT_FIELDS)
+    try:
+        account_balance = float(payload["account_balance_kes"])
+        transactions_per_month = float(payload["transactions_per_month"])
+        years_as_customer = float(payload["years_as_customer"])
+        digital_value = payload["digital_banking_usage_score"]
+        digital_score = None if digital_value is None else float(digital_value)
+    except (TypeError, ValueError, OverflowError):
+        raise InputError("All clustering inputs must be numbers, except a null digital score.")
 
+    numeric_values = [account_balance, transactions_per_month, years_as_customer]
+    if digital_score is not None:
+        numeric_values.append(digital_score)
+    if not np.isfinite(numeric_values).all():
+        raise InputError("Clustering inputs must be finite numbers.")
+    if account_balance <= 0:
+        raise InputError("account_balance_kes must be greater than zero.")
+    if transactions_per_month < 0 or years_as_customer < 0:
+        raise InputError("Transactions and customer tenure cannot be negative.")
+    if digital_score is not None and not 0 <= digital_score <= 100:
+        raise InputError("digital_banking_usage_score must be between 0 and 100.")
+
+    if digital_score is None:
+        branch_region = str(payload.get("branch_region", "")).strip()
+        if branch_region not in CLUSTER_REGION_MEDIANS:
+            raise InputError("A known branch_region is required when the digital score is null.")
+        digital_score = float(CLUSTER_REGION_MEDIANS[branch_region])
+
+    transformed_values = {
+        "log10_account_balance": float(np.log10(account_balance)),
+        "transactions_per_month": transactions_per_month,
+        "years_as_customer": years_as_customer,
+        "digital_banking_usage_score": digital_score,
+    }
+    input_row = pd.DataFrame([{
+        feature: transformed_values[feature] for feature in CLUSTERING_FEATURES
+    }])
     scaled_input = clustering_scaler.transform(input_row)
     assigned_cluster = int(clustering_kmeans.predict(scaled_input)[0])
 
     return jsonify({
-        "assigned_cluster": assigned_cluster,
-        "model": "K-Means (k=5, standardized features)",
+        "model": "kmeans",
+        "cluster": assigned_cluster,
+        "cluster_name": CLUSTER_NAMES.get(assigned_cluster, f"Cluster {assigned_cluster}"),
     })
 
 
 # =======================================================================
 # MEMBER 4 (Felista): ASSOCIATION RULE MINING (recommender)
-# -----------------------------------------------------------------------
-# TODO (Felista): replace the lecturer's e-commerce rules with OUR rules.
-#   1. Copy our saved file into model/ and change the filename below.
-#   2. Rename the URL: /api/v1/models/<our-model-name>/predictions
-#   3. If our artifact is shaped differently (e.g., an mlxtend rules
-#      DataFrame instead of a lookup dict, or no sku_lookup), adapt the
-#      matching loop and the product names. Keep the input checks.
-#   4. Update the sample requests with items that really appear in our
-#      rules, so a recommendation comes back.
 # =======================================================================
-arm_artifact = load_artifact("apriori_recommendation_rules.joblib")
+arm_artifact = load_artifact("arm_pharmacy_basket_rules.joblib")
 recommendation_lookup = arm_artifact["recommendation_lookup"]
 sku_lookup = arm_artifact["sku_lookup"]
 
 # Sample request (cURL):
-#   curl -X POST http://127.0.0.1:5000/api/v1/models/ecommerce-recommender/predictions \
+#   curl -X POST http://127.0.0.1:5000/api/v1/models/pharmacy-recommender/predictions \
 #        -H "Content-Type: application/json" \
-#        -d '{"cart": ["H06", "H07"]}'
-@app.route("/api/v1/models/ecommerce-recommender/predictions", methods=["POST"])
+#        -d '{"cart": ["D05", "D04"]}'
+@app.route("/api/v1/models/pharmacy-recommender/predictions", methods=["POST"])
 def recommend_products():
     payload = get_payload(["cart"])
 
     cart_items = payload["cart"]
     if not isinstance(cart_items, list) or not cart_items:
-        raise InputError("'cart' must be a non-empty list, e.g. [\"H06\", \"H07\"].")
+        raise InputError("'cart' must be a non-empty list, e.g. [\"D05\", \"D04\"].")
     cart = {str(item).strip() for item in cart_items}
 
     try:
@@ -293,7 +319,7 @@ def recommend_products():
     recommendations = [
         {
             "sku": str(sku),
-            "product_name": sku_lookup.loc[sku, "product_name"],
+            "product_name": sku_lookup.get(sku, str(sku)),
             "confidence": round(float(confidence), 3),
             "lift": round(float(lift), 2),
         }
@@ -304,7 +330,7 @@ def recommend_products():
         "cart": sorted(cart),
         "recommendations": recommendations,
         "message": "" if recommendations else "No rule matches this cart. Try other items.",
-        "model": "Apriori association rules, cleaned + precomputed lookup",
+        "model": "Apriori pharmacy basket association rules (precomputed lookup)",
     })
 
 
