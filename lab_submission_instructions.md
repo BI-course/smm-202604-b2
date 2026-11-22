@@ -8,9 +8,9 @@
 
 | **Details**                                                                                                                           | **Comment** |
 |:--------------------------------------------------------------------------------------------------------------------------------------|:------------|
-| **Student ID**                                                                                                                        |             |
-| **Name**                                                                                                                              |             |
-| **What part of the lab did you personally<br/>contribute to (provide a link to the<br/>branch(es)), and what did you learn from it?** |             |
+| **Student ID**                                                                                                                        |   168657         |
+| **Name**                                                                                                                              |   Lisa Mburu          |
+| **What part of the lab did you personally<br/>contribute to (provide a link to the<br/>branch(es)), and what did you learn from it?** |    Trained and serialized the student exam score Ridge regression model (`model/student_exam_score_regressor.joblib`) using a `TransformedTargetRegressor` pipeline with Yeo-Johnson target transformation, built the Flask RESTish API endpoints (`GET /health` and `POST /predict` with `HTTP 400` validation for missing fields), and deployed the live service on Render (`https://smm-202604-b2-lisa.onrender.com`).<br>**Branch:** (https://github.com/mukamisrealm/smm-202604-b2/tree/main) <br>     |
 
 **Member 2:**
 
