@@ -2,7 +2,7 @@
 
 ## Student Details and Individual Member Contributions
 
-**Name of the team on GitHub Classroom:**
+**Name of the team on GitHub Classroom:**  202604-B2
 
 **Member 1:**
 
@@ -87,8 +87,8 @@ Fill in only the rows that apply to your chosen difficulty level (see Part C bel
 | **Deployment target**                             | **URL** |
 |:--------------------------------------------------|:--------|
 | Render (the full `api.py`, all endpoints)         | https://smm-202604-b2-fjh3.onrender.com   |
-| Hugging Face Space (Gradio, one tab per model)    |         |
-| Streamlit Community Cloud app (one tab per model) |         |
+| Hugging Face Space (Gradio, one tab per model)    | https://huggingface.co/spaces/Vmundia/bbt4206-model-demos        |
+| Streamlit Community Cloud app (one tab per model) | https://202604-b2-mariam.streamlit.app/        |
 
 ---
 
