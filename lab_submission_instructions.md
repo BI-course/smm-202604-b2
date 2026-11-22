@@ -24,9 +24,9 @@
 
 | **Details**                                                                                                                           | **Comment** |
 |:--------------------------------------------------------------------------------------------------------------------------------------|:------------|
-| **Student ID**                                                                                                                        |             |
+| **Student ID**                                                                                                                        |  169531     |
 | **Name**                                                                                                                              | Amiir Ibrahim |
-| **What part of the lab did you personally<br/>contribute to (provide a link to the<br/>branch(es)), and what did you learn from it?** | I contributed the clustering model work for the mall customer segmenter by implementing the K-Means prediction route in `api.py` and validating it with a live API request. My work was committed on the `feature/member3-submission` branch. I learned that unsupervised models still need the same preprocessing at inference time, especially scaling, and that the API is the actual delivery layer for the model. |
+| **What part of the lab did you personally<br/>contribute to (provide a link to the<br/>branch(es)), and what did you learn from it?** | https://github.com/BI-course/smm-202604-b2/tree/feature/clustering I contributed the clustering model work for the mall customer segmenter by implementing the K-Means prediction route in `api.py` and validating it with a live API request. My work was committed on the `feature/member3-submission` branch. I learned that unsupervised models still need the same preprocessing at inference time, especially scaling, and that the API is the actual delivery layer for the model. |
 
 **Member 4:**
 
